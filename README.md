@@ -35,7 +35,7 @@ flutter run             # android
 
 En el repo: Settings → Pages → Source: **GitHub Actions**. Cada push a `main` ejecuta `.github/workflows/deploy-web.yml` (requiere haber commiteado la carpeta `web/`).
 
-Como `firebase_options.dart` no está en el repo, el workflow lo genera desde un secret: en Settings → Secrets and variables → Actions crea `FIREBASE_OPTIONS_DART` con el **contenido completo** de tu `lib/firebase_options.dart` local.
+Como `firebase_options.dart` no está en claro en el repo, el workflow lo descifra con git-secret (ver [Seguridad de los secrets](#seguridad-de-los-secrets-git-secret)).
 
 ## Build y publicación Android (Google Play)
 
@@ -51,11 +51,11 @@ git tag v1.0.0 && git push origin v1.0.0
 
 ### Secrets de GitHub Actions
 
-En Settings → Secrets and variables → Actions → **New repository secret** (deben ser secrets de repositorio, no de environment):
+Se guardan como **environment secrets** del environment `production` (Settings → Environments → production). Ver [Seguridad de los secrets](#seguridad-de-los-secrets-git-secret).
 
 | Secret | Contenido | Usado en |
 |---|---|---|
-| `FIREBASE_OPTIONS_DART` | Contenido completo de `lib/firebase_options.dart` | Web y Android |
+| `GPG_PRIVATE_KEY` | Clave privada GPG de CI en base64 (descifra `firebase_options.dart` y `google-services.json`) | Web y Android |
 | `ANDROID_KEYSTORE_BASE64` | El `.jks` codificado en base64 | Android |
 | `ANDROID_KEYSTORE_PASSWORD` | Contraseña del keystore | Android |
 | `ANDROID_KEY_PASSWORD` | Contraseña de la clave | Android |
@@ -68,11 +68,10 @@ Crear el keystore (guárdalo **fuera del repo** y haz copia de seguridad; si lo 
 keytool -genkeypair -v -keystore $HOME\upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Copiar al portapapeles el keystore en base64 (para `ANDROID_KEYSTORE_BASE64`) y el Dart (para `FIREBASE_OPTIONS_DART`):
+Copiar al portapapeles el keystore en base64 (para `ANDROID_KEYSTORE_BASE64`):
 
 ```powershell
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\upload-keystore.jks")) | Set-Clipboard
-Get-Content lib\firebase_options.dart -Raw | Set-Clipboard
 ```
 
 Cuenta de servicio de Play: créala en Google Cloud, descarga su clave JSON e invita su email en Play Console → Usuarios y permisos con permiso de **publicar versiones** en la app. Pega el JSON completo en `PLAY_SERVICE_ACCOUNT_JSON`.
@@ -81,6 +80,53 @@ Cuenta de servicio de Play: créala en Google Cloud, descarga su clave JSON e in
 
 - **La primera versión se sube a mano.** Play exige crear la app (`com.saifort.consumiciones`) y hacer la primera subida desde la consola; a partir de ahí la API ya puede publicar.
 - **SHA-1 en Firebase.** Google Sign-In necesita el SHA-1 de la firma. Añade el de tu keystore de subida (`keytool -list -v -keystore $HOME\upload-keystore.jks -alias upload`) y, si usas Play App Signing, también el del certificado de firma de la app (Play Console → Integridad de la app). Sin esto el login falla en la app instalada desde Play.
+
+## Seguridad de los secrets (git-secret)
+
+El repo es público, así que `lib/firebase_options.dart` y `android/app/google-services.json` **nunca** se commitean en claro (están en `.gitignore`). Se versionan sus copias cifradas con [git-secret](https://git-secret.io) (`*.secret`) y solo pueden abrirlas las claves GPG registradas:
+
+| Clave | Dónde vive | Para qué |
+|---|---|---|
+| Personal (`damarur92@gmail.com`, con contraseña) | Tu keyring local | Descifrar y recifrar en tu máquina |
+| CI (`ci@saifort.local`, sin contraseña) | Secret `GPG_PRIVATE_KEY` de GitHub | Descifrar en Actions |
+
+Quién tiene acceso en cada momento: `git secret whoknows`.
+
+### Uso diario (Git Bash)
+
+```bash
+git secret reveal      # descifra los ficheros reales (pide tu contraseña GPG)
+# ...editas lib/firebase_options.dart si hace falta...
+git secret hide        # vuelve a cifrar -> commitea los *.secret
+```
+
+Si cambias un fichero secreto, ejecuta `git secret hide` y commitea los `.secret` actualizados; si no, CI descifrará la versión antigua. Añadir otro fichero: `git secret add <fichero>` y `git secret hide`.
+
+### Dar o quitar acceso a alguien
+
+```bash
+gpg --import clave-publica-de-la-persona.asc
+git secret tell su@email.com      # dar acceso
+git secret killperson su@email.com # quitar acceso
+git secret hide -d                # recifra (-d borra los .secret antiguos) y commitea
+```
+
+Quitar a alguien **no invalida** lo que ya pudo descifrar ni las versiones antiguas del historial: si esa persona se lleva la config, regenera la apiKey de Firebase (restringida por dominio/paquete) y vuelve a cifrar.
+
+### Configurar GitHub (una vez)
+
+1. Settings → Environments → **New environment** → `production`.
+2. *Deployment branches and tags* → **Selected branches and tags** → `main` y el patrón de tag `v*`. Solo esas refs podrán leer los secrets.
+3. (Opcional) *Required reviewers* → tú, para aprobar cada despliegue. Pide un clic por push a `main`; déjalo vacío si trabajas solo.
+4. Crea ahí el *Environment secret* `GPG_PRIVATE_KEY` con la clave privada de CI en base64. Con la CLI de GitHub:
+   ```bash
+   gh secret set GPG_PRIVATE_KEY --env production < ~/saifort-ci-gpg-private.b64
+   ```
+   Sin CLI: pega el contenido del fichero en Settings → Environments → production → *Add environment secret*.
+5. Borra `~/saifort-ci-gpg-private.b64` en cuanto lo hayas subido; desde GitHub no se puede volver a leer. Si se pierde, genera otra clave de CI, ejecuta `git secret tell` con la nueva, `killperson` con la antigua y `git secret hide`.
+6. Protege `main` (Settings → Rules: exigir PR, bloquear force-push) y mantén cerrados los colaboradores con permiso de escritura: quien pueda cambiar un workflow podría hacerle imprimir la clave de CI.
+
+Los workflows usan la acción `.github/actions/reveal-secrets`, que instala git-secret v0.5.0 (fijado por commit), importa `GPG_PRIVATE_KEY` y ejecuta `git secret reveal`.
 
 ## Notas de diseño
 

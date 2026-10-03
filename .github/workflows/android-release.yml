@@ -16,6 +16,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Los secrets viven en el environment "production" (solo accesible desde main y tags v*).
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
@@ -29,10 +31,10 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generar firebase_options.dart desde el secret
-        env:
-          FIREBASE_OPTIONS_DART: ${{ secrets.FIREBASE_OPTIONS_DART }}
-        run: printf '%s\n' "$FIREBASE_OPTIONS_DART" > lib/firebase_options.dart
+      # Descifra lib/firebase_options.dart y android/app/google-services.json (git-secret).
+      - uses: ./.github/actions/reveal-secrets
+        with:
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
 
       - name: Preparar keystore de firma
         env:
@@ -68,6 +70,7 @@ jobs:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/download-artifact@v4
         with:

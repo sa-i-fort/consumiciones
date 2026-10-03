@@ -17,16 +17,17 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Los secrets viven en el environment "production" (solo accesible desde main).
+    environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Generar firebase_options.dart desde el secret
-        env:
-          FIREBASE_OPTIONS_DART: ${{ secrets.FIREBASE_OPTIONS_DART }}
-        run: printf '%s\n' "$FIREBASE_OPTIONS_DART" > lib/firebase_options.dart
+      - uses: ./.github/actions/reveal-secrets
+        with:
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
       - run: flutter pub get
       - run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
       - uses: actions/upload-pages-artifact@v3

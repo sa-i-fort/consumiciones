@@ -1,0 +1,28 @@
+name: Descifrar secretos con git-secret
+description: >
+  Instala git-secret (v0.5.0 fijado por commit), importa la clave GPG de CI y descifra
+  lib/firebase_options.dart y android/app/google-services.json.
+
+inputs:
+  gpg-private-key:
+    description: Clave privada GPG de CI (armored, codificada en base64). Viene del secret GPG_PRIVATE_KEY.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Instalar git-secret
+      shell: bash
+      run: |
+        git clone --quiet https://github.com/sobolevn/git-secret.git "$RUNNER_TEMP/git-secret"
+        git -C "$RUNNER_TEMP/git-secret" checkout --quiet 83e1e282f64367c5950dcb46ff39175b8abd1baa
+        sudo make -C "$RUNNER_TEMP/git-secret" install PREFIX=/usr/local > /dev/null
+
+    - name: Importar clave de CI y descifrar
+      shell: bash
+      env:
+        GPG_PRIVATE_KEY: ${{ inputs.gpg-private-key }}
+      run: |
+        echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --quiet --import
+        git secret reveal -f
+        test -s lib/firebase_options.dart

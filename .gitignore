@@ -25,3 +25,9 @@ firebase-debug.log
 # Config real de Firebase (usa lib/firebase_options.dart.example como plantilla)
 lib/firebase_options.dart
 android/app/google-services.json
+.gitsecret/keys/random_seed
+!*.secret
+.gitsecret/keys/S.*
+.gitsecret/keys/private-keys-v1.d/
+.gitsecret/keys/openpgp-revocs.d/
+.gitsecret/keys/pubring.kbx~
