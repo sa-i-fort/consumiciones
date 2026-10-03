@@ -25,6 +25,15 @@ runs:
       env:
         GPG_PRIVATE_KEY: ${{ inputs.gpg-private-key }}
       run: |
-        echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --quiet --import
+        # Acepta la clave en base64 (esperado, ~988 caracteres) o pegada tal cual en formato armored.
+        # En base64 se ignoran espacios y saltos de línea (p. ej. \r de Windows al copiar).
+        if printf '%s' "$GPG_PRIVATE_KEY" | grep -q 'BEGIN PGP PRIVATE KEY BLOCK'; then
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --quiet --import
+        else
+          if ! printf '%s' "$GPG_PRIVATE_KEY" | tr -d '[:space:]' | base64 -d 2> /dev/null | gpg --batch --quiet --import; then
+            echo "::error::GPG_PRIVATE_KEY no es una clave válida (longitud recibida: ${#GPG_PRIVATE_KEY} caracteres; se esperan ~988 en base64). Vuelve a subirla pegando el contenido de saifort-ci-gpg-private.b64 sin comillas."
+            exit 1
+          fi
+        fi
         git secret reveal -f
         test -s lib/firebase_options.dart
