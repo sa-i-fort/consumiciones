@@ -98,7 +98,8 @@ class _MembersPageState extends State<MembersPage> {
                 ListTile(
                   leading: CircleAvatar(child: Text(m.label.characters.first.toUpperCase())),
                   title: Text(m.label),
-                  subtitle: Text(m.uid == null ? '${m.email} · aún no ha accedido' : m.email),
+                  subtitle: Text('${m.email}\n${accessLabel(m)}'),
+                  isThreeLine: true,
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -288,7 +289,7 @@ class _WhitelistPageState extends State<WhitelistPage> {
     final isOwner = context.read<AppState>().isOwner;
     return Scaffold(
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _add(context, repo),
+        onPressed: () => _form(context, repo, isOwner: isOwner),
         child: const Icon(Icons.person_add_alt),
       ),
       body: StreamBuilder<List<Member>>(
@@ -299,72 +300,10 @@ class _WhitelistPageState extends State<WhitelistPage> {
             if (s.hasError || a.hasError) return ErrorBox(s.error ?? a.error);
             if (!s.hasData || !a.hasData) return loading;
             final list = s.data!;
-            final admins = a.data!;
             if (list.isEmpty) return const Center(child: Text('Nadie en la whitelist. Pulsa para añadir un socio.'));
             return ListView(
               padding: const EdgeInsets.only(bottom: 88),
-              children: [
-                for (final m in list)
-                  ListTile(
-                    title: Row(
-                      children: [
-                        Flexible(child: Text(m.label, overflow: TextOverflow.ellipsis)),
-                        if (admins.contains(m.key)) ...[
-                          const SizedBox(width: 8),
-                          const Chip(
-                            label: Text('Admin'),
-                            visualDensity: VisualDensity.compact,
-                            padding: EdgeInsets.zero,
-                          ),
-                        ],
-                      ],
-                    ),
-                    subtitle: Text(m.email),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Solo el owner nombra o revierte admins.
-                        if (isOwner)
-                          IconButton(
-                            tooltip: admins.contains(m.key) ? 'Quitar admin' : 'Hacer admin',
-                            icon: Icon(
-                              admins.contains(m.key) ? Icons.remove_moderator_outlined : Icons.admin_panel_settings_outlined,
-                            ),
-                            onPressed: () async {
-                              final makeAdmin = !admins.contains(m.key);
-                              final ok = await confirm(
-                                context,
-                                makeAdmin ? 'Hacer administrador' : 'Quitar administrador',
-                                makeAdmin
-                                    ? '${m.label} podrá gestionar catálogo, socios, deudas e historial.'
-                                    : '${m.label} volverá a ser un socio normal.',
-                                action: makeAdmin ? 'Hacer admin' : 'Quitar admin',
-                              );
-                              if (ok && context.mounted) await guarded(context, () => repo.setAdmin(m.key, makeAdmin));
-                            },
-                          ),
-                        IconButton(
-                          tooltip: 'Dar de baja',
-                          icon: const Icon(Icons.person_remove_outlined),
-                          // Un admin promovido no puede dar de baja a otro admin (las reglas también lo impiden).
-                          onPressed: !isOwner && admins.contains(m.key)
-                              ? null
-                              : () async {
-                                  final ok = await confirm(
-                                    context,
-                                    'Dar de baja',
-                                    '${m.email} perderá el acceso a la aplicación. Su consumo actual se conserva.',
-                                    action: 'Dar de baja',
-                                  );
-                                  if (ok && context.mounted) {
-                                    await guarded(context, () => repo.removeMember(m.key, clearAdmin: isOwner));
-                                  }
-                                },
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
+              children: [for (final m in list) _tile(context, repo, m, a.data!.contains(m.key), isOwner)],
             );
           },
         ),
@@ -372,15 +311,78 @@ class _WhitelistPageState extends State<WhitelistPage> {
     );
   }
 
-  Future<void> _add(BuildContext context, Repo repo) async {
-    final email = TextEditingController();
-    final name = TextEditingController();
+  Widget _tile(BuildContext context, Repo repo, Member m, bool isAdmin, bool isOwner) {
+    // Un admin promovido no puede modificar a otros admins (las reglas también lo impiden).
+    final locked = isAdmin && !isOwner;
+
+    return ListTile(
+      isThreeLine: true,
+      title: Row(
+        children: [
+          Flexible(child: Text(m.label, overflow: TextOverflow.ellipsis)),
+          if (isAdmin) ...[
+            const SizedBox(width: 8),
+            const Chip(label: Text('Admin'), visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+          ],
+        ],
+      ),
+      subtitle: Text('${m.email}\n${accessLabel(m)}'),
+      trailing: PopupMenuButton<String>(
+        onSelected: (action) async {
+          switch (action) {
+            case 'edit':
+              await _form(context, repo, isOwner: isOwner, existing: m, wasAdmin: isAdmin);
+            case 'admin':
+              final makeAdmin = !isAdmin;
+              final ok = await confirm(
+                context,
+                makeAdmin ? 'Hacer administrador' : 'Quitar administrador',
+                makeAdmin
+                    ? '${m.label} podrá gestionar catálogo, socios, deudas e historial.'
+                    : '${m.label} volverá a ser un socio normal.',
+                action: makeAdmin ? 'Hacer admin' : 'Quitar admin',
+              );
+              if (ok && context.mounted) await guarded(context, () => repo.setAdmin(m.key, makeAdmin));
+            case 'remove':
+              final ok = await confirm(
+                context,
+                'Dar de baja',
+                '${m.email} perderá el acceso a la aplicación. Su consumo actual se conserva.',
+                action: 'Dar de baja',
+              );
+              if (ok && context.mounted) {
+                await guarded(context, () => repo.removeMember(m.key, clearAdmin: isOwner));
+              }
+          }
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(value: 'edit', enabled: !locked, child: const Text('Editar')),
+          // Solo el owner nombra o revierte admins.
+          if (isOwner) PopupMenuItem(value: 'admin', child: Text(isAdmin ? 'Quitar admin' : 'Hacer admin')),
+          PopupMenuItem(value: 'remove', enabled: !locked, child: const Text('Dar de baja')),
+        ],
+      ),
+    );
+  }
+
+  /// Alta ([existing] null) o edición de nombre/email de un socio.
+  Future<void> _form(
+    BuildContext context,
+    Repo repo, {
+    required bool isOwner,
+    Member? existing,
+    bool wasAdmin = false,
+  }) async {
+    final email = TextEditingController(text: existing?.email ?? '');
+    final name = TextEditingController(text: existing?.name ?? '');
     final formKey = GlobalKey<FormState>();
+    // El email es la clave del socio: solo se corrige antes de su primer acceso.
+    final emailLocked = existing?.uid != null;
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Alta de socio'),
+        title: Text(existing == null ? 'Alta de socio' : 'Editar socio'),
         content: Form(
           key: formKey,
           child: Column(
@@ -388,7 +390,12 @@ class _WhitelistPageState extends State<WhitelistPage> {
             children: [
               TextFormField(
                 controller: email,
-                decoration: const InputDecoration(labelText: 'Email (cuenta de Google)'),
+                enabled: !emailLocked,
+                decoration: InputDecoration(
+                  labelText: 'Email (cuenta de Google)',
+                  helperText: emailLocked ? 'No se puede cambiar: el socio ya ha accedido.' : null,
+                  helperMaxLines: 2,
+                ),
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) {
                   final x = (v ?? '').trim();
@@ -406,14 +413,19 @@ class _WhitelistPageState extends State<WhitelistPage> {
             onPressed: () {
               if (formKey.currentState!.validate()) Navigator.pop(ctx, true);
             },
-            child: const Text('Añadir'),
+            child: Text(existing == null ? 'Añadir' : 'Guardar'),
           ),
         ],
       ),
     );
 
     if (ok == true && context.mounted) {
-      await guarded(context, () => repo.addMember(email.text, name.text));
+      await guarded(
+        context,
+        () => existing == null
+            ? repo.addMember(email.text, name.text)
+            : repo.updateMember(existing, name: name.text, email: email.text, wasAdmin: wasAdmin),
+      );
     }
   }
 }

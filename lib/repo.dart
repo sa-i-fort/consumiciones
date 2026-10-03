@@ -79,8 +79,15 @@ class Repo {
       'displayName': user.displayName ?? '',
       'role': isAdmin ? 'admin' : 'user',
     });
-    // El owner no está en la whitelist; los demás (admins promovidos incluidos) guardan su uid.
-    if (!isOwner) await _r('whitelist/${emailKey(email)}/uid').set(user.uid);
+    // El owner no está en la whitelist; los demás (admins promovidos incluidos) guardan su uid
+    // y la fecha del último acceso.
+    if (!isOwner) {
+      final key = emailKey(email);
+      await _db.ref().update({
+        'whitelist/$key/uid': user.uid,
+        'whitelist/$key/lastLogin': ServerValue.timestamp,
+      });
+    }
   }
 
   // ---- Consumiciones ----
@@ -144,6 +151,36 @@ class Repo {
         'approved': true,
         'createdAt': ServerValue.timestamp,
       });
+
+  /// Edita nombre y email. La clave de la entrada es el email, así que cambiarlo mueve el nodo;
+  /// solo se permite si el socio no ha accedido nunca (si no, perdería el enlace con su consumo).
+  Future<void> updateMember(Member old, {required String name, required String email, required bool wasAdmin}) async {
+    final newEmail = email.trim().toLowerCase();
+    final newKey = emailKey(newEmail);
+
+    if (newKey == old.key) {
+      await _db.ref().update({
+        'whitelist/${old.key}/name': name.trim(),
+        'whitelist/${old.key}/email': newEmail,
+      });
+      return;
+    }
+    if (old.uid != null) throw const UserError('Este socio ya ha accedido: su email no se puede cambiar.');
+    if ((await _r('whitelist/$newKey').get()).exists) {
+      throw const UserError('Ya existe un socio con ese email.');
+    }
+    await _db.ref().update({
+      'whitelist/${old.key}': null,
+      'whitelist/$newKey': {
+        'email': newEmail,
+        'name': name.trim(),
+        'approved': old.approved,
+        'createdAt': old.createdAt ?? ServerValue.timestamp,
+      },
+      if (wasAdmin) 'admins/${old.key}': null,
+      if (wasAdmin) 'admins/$newKey': true,
+    });
+  }
 
   /// Si lo hace el owner también limpia la marca de admin (un admin promovido no puede tocar esa ruta).
   Future<void> removeMember(String key, {required bool clearAdmin}) => _db.ref().update({

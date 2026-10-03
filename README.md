@@ -89,6 +89,7 @@ Cuenta de servicio de Play: créala en Google Cloud, descarga su clave JSON e in
 - Los admins promovidos se guardan en `admins/<email-clave>` y tienen los mismos poderes de gestión que el owner, pero solo mientras sigan en la whitelist. No pueden nombrar admins ni tocar la entrada de otro admin. Cambiar de rol requiere que el usuario vuelva a abrir la app.
 - Al cambiar `database.rules.json` hay que volver a desplegarlo (`firebase deploy --only database`).
 - Solo los admins pueden borrar pagos del historial; borrar un pago no modifica ninguna deuda.
+- Cada vez que un socio abre la app se guarda `lastLogin` en su entrada de la whitelist (visible para el admin). El nombre de un socio se puede editar siempre; su email solo antes de que acceda por primera vez, porque es la clave de la entrada y el enlace con su consumo.
 
 - Al añadir una consumición, el precio unitario de la línea se fija al precio actual del catálogo.
 - Los socios pueden sumar y restar unidades de su propio consumo (por si se equivocan); solo el admin gestiona el de otros socios.

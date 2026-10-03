@@ -1,8 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../models.dart';
+
 final _money = NumberFormat.currency(locale: 'es_ES', symbol: '€');
 String money(double v) => _money.format(v);
+
+final _dateTime = DateFormat('dd/MM/yyyy HH:mm');
+
+/// Estado de acceso de un socio para mostrar en las listas del admin.
+String accessLabel(Member m) {
+  if (m.uid == null) return 'aún no ha accedido';
+  final last = m.lastLogin;
+  return last == null ? 'ha accedido (sin fecha registrada)' : 'último acceso ${_dateTime.format(last)}';
+}
 
 Future<bool> confirm(BuildContext context, String title, String message, {String action = 'Confirmar'}) async {
   final res = await showDialog<bool>(

@@ -60,14 +60,33 @@ class ConsumptionTab {
   }
 }
 
+/// Error con mensaje apto para mostrar tal cual al usuario.
+class UserError implements Exception {
+  const UserError(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class Member {
   final String key;
   final String email;
   final String name;
   final bool approved;
   final String? uid;
+  final int? createdAt;
+  final DateTime? lastLogin;
 
-  const Member({required this.key, required this.email, required this.name, required this.approved, this.uid});
+  const Member({
+    required this.key,
+    required this.email,
+    required this.name,
+    required this.approved,
+    this.uid,
+    this.createdAt,
+    this.lastLogin,
+  });
 
   factory Member.fromMap(String key, Map<String, dynamic> m) => Member(
         key: key,
@@ -75,6 +94,8 @@ class Member {
         name: (m['name'] ?? '') as String,
         approved: m['approved'] == true,
         uid: m['uid'] as String?,
+        createdAt: m['createdAt'] is num ? _i(m['createdAt']) : null,
+        lastLogin: m['lastLogin'] is num ? DateTime.fromMillisecondsSinceEpoch(_i(m['lastLogin'])) : null,
       );
 
   String get label => name.isNotEmpty ? name : email;
