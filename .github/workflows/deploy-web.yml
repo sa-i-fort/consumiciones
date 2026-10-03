@@ -23,6 +23,10 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Generar firebase_options.dart desde el secret
+        env:
+          FIREBASE_OPTIONS_DART: ${{ secrets.FIREBASE_OPTIONS_DART }}
+        run: printf '%s\n' "$FIREBASE_OPTIONS_DART" > lib/firebase_options.dart
       - run: flutter pub get
       - run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
       - uses: actions/upload-pages-artifact@v3

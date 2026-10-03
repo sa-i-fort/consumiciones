@@ -1,5 +1,5 @@
-// PLACEHOLDER: ejecuta `flutterfire configure` para regenerar este fichero con
-// los valores reales de tu proyecto de Firebase (Android + Web).
+// PLANTILLA: copia este fichero a firebase_options.dart (ignorado por git) y
+// rellénalo, o ejecuta `flutterfire configure` para generarlo con tus valores.
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart' show kIsWeb;
 

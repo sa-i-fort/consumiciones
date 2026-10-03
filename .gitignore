@@ -21,3 +21,6 @@ android/key.properties
 # Firebase local
 .firebase/
 firebase-debug.log
+
+# Config real de Firebase (usa lib/firebase_options.dart.example como plantilla)
+lib/firebase_options.dart

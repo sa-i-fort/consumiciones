@@ -13,10 +13,11 @@ App Flutter (Android + Web) con Firebase Realtime Database y autenticación con 
 3. Crea el proyecto en Firebase y activa:
    - **Authentication → Google** como proveedor.
    - **Realtime Database** (plan gratuito).
-4. Conecta la app (sobrescribe `lib/firebase_options.dart`):
+4. Conecta la app. `lib/firebase_options.dart` **no se sube a git** (está en `.gitignore`); la plantilla es `lib/firebase_options.dart.example`:
    ```bash
    flutterfire configure
    ```
+   (o copia el `.example` a `lib/firebase_options.dart` y rellena los valores a mano).
 5. Publica las reglas de seguridad:
    ```bash
    firebase deploy --only database
@@ -33,6 +34,8 @@ flutter run             # android
 ## Despliegue web (GitHub Pages)
 
 En el repo: Settings → Pages → Source: **GitHub Actions**. Cada push a `main` ejecuta `.github/workflows/deploy-web.yml` (requiere haber commiteado la carpeta `web/`).
+
+Como `firebase_options.dart` no está en el repo, el workflow lo genera desde un secret: en Settings → Secrets and variables → Actions crea `FIREBASE_OPTIONS_DART` con el **contenido completo** de tu `lib/firebase_options.dart` local.
 
 ## Notas de diseño
 
