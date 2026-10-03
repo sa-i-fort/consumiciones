@@ -85,7 +85,20 @@ Cuenta de servicio de Play: créala en Google Cloud, descarga su clave JSON e in
 ## Notas de diseño
 
 - Whitelist indexada por email en minúsculas con `.` → `,` (p. ej. `socio@email,com`), así las reglas pueden comprobar el acceso sin conocer el uid.
-- El administrador es `damarur92@gmail.com` (email verificado), fijado en `database.rules.json`.
+- El **owner** es `damarur92@gmail.com` (email verificado), fijado en `database.rules.json`. Es el único que puede nombrar o revertir admins (pestaña Whitelist → icono de escudo).
+- Los admins promovidos se guardan en `admins/<email-clave>` y tienen los mismos poderes de gestión que el owner, pero solo mientras sigan en la whitelist. No pueden nombrar admins ni tocar la entrada de otro admin. Cambiar de rol requiere que el usuario vuelva a abrir la app.
+- Al cambiar `database.rules.json` hay que volver a desplegarlo (`firebase deploy --only database`).
+- Solo los admins pueden borrar pagos del historial; borrar un pago no modifica ninguna deuda.
+
 - Al añadir una consumición, el precio unitario de la línea se fija al precio actual del catálogo.
 - Los socios pueden sumar y restar unidades de su propio consumo (por si se equivocan); solo el admin gestiona el de otros socios.
 - Un socio aparece con su deuda en el panel de admin cuando ya ha iniciado sesión al menos una vez (necesitamos su `uid`).
+
+## Iconos
+
+El icono de la app y el favicon son la cerveza del login (`Icons.sports_bar`, naranja `#D84315`). Para regenerarlos:
+
+```bash
+flutter test tool/generate_icons_test.dart   # renderiza assets/icon/*.png
+dart run flutter_launcher_icons              # genera Android (adaptive) y web
+```

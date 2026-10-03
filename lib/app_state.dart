@@ -19,6 +19,9 @@ class AppState extends ChangeNotifier {
   AuthStatus status = AuthStatus.loading;
   User? user;
   bool isAdmin = false;
+
+  /// Administrador fijo (adminEmail): el único que puede nombrar o revertir admins.
+  bool isOwner = false;
   String? error;
 
   String get uid => user!.uid;
@@ -27,21 +30,24 @@ class AppState extends ChangeNotifier {
   Future<void> _onUser(User? u) async {
     user = u;
     isAdmin = false;
+    isOwner = false;
     if (u == null) {
       _set(AuthStatus.signedOut);
       return;
     }
     _set(AuthStatus.loading);
     try {
-      isAdmin = email == adminEmail && u.emailVerified;
-      if (!isAdmin) {
+      isOwner = email == adminEmail && u.emailVerified;
+      isAdmin = isOwner;
+      if (!isOwner) {
         final entry = await _repo.whitelistEntry(email);
         if (entry == null || !entry.approved) {
           _set(AuthStatus.denied);
           return;
         }
+        isAdmin = await _repo.hasAdminFlag(email);
       }
-      await _repo.registerUser(u, isAdmin: isAdmin);
+      await _repo.registerUser(u, isAdmin: isAdmin, isOwner: isOwner);
       _set(AuthStatus.ready);
     } catch (e) {
       _set(AuthStatus.denied, e.toString());

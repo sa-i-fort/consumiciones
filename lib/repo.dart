@@ -61,14 +61,26 @@ class Repo {
     return Member.fromMap(key, asMap(snap.value));
   }
 
-  Future<void> registerUser(User user, {required bool isAdmin}) async {
+  /// ¿Tiene el email la marca de admin promovido? (cada usuario puede leer solo la suya)
+  Future<bool> hasAdminFlag(String email) async =>
+      (await _r('admins/${emailKey(email)}').get()).value == true;
+
+  /// Solo admin: claves de email (emailKey) de los admins promovidos.
+  Stream<Set<String>> admins() => _r('admins').onValue.map((e) => asMap(e.snapshot.value).keys.toSet());
+
+  /// Solo el owner. Promueve o revierte a un socio.
+  Future<void> setAdmin(String key, bool admin) =>
+      admin ? _r('admins/$key').set(true) : _r('admins/$key').remove();
+
+  Future<void> registerUser(User user, {required bool isAdmin, required bool isOwner}) async {
     final email = (user.email ?? '').toLowerCase();
     await _r('users/${user.uid}').set({
       'email': email,
       'displayName': user.displayName ?? '',
       'role': isAdmin ? 'admin' : 'user',
     });
-    if (!isAdmin) await _r('whitelist/${emailKey(email)}/uid').set(user.uid);
+    // El owner no está en la whitelist; los demás (admins promovidos incluidos) guardan su uid.
+    if (!isOwner) await _r('whitelist/${emailKey(email)}/uid').set(user.uid);
   }
 
   // ---- Consumiciones ----
@@ -133,5 +145,9 @@ class Repo {
         'createdAt': ServerValue.timestamp,
       });
 
-  Future<void> removeMember(String key) => _r('whitelist/$key').remove();
+  /// Si lo hace el owner también limpia la marca de admin (un admin promovido no puede tocar esa ruta).
+  Future<void> removeMember(String key, {required bool clearAdmin}) => _db.ref().update({
+        'whitelist/$key': null,
+        if (clearAdmin) 'admins/$key': null,
+      });
 }

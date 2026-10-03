@@ -280,10 +280,12 @@ class WhitelistPage extends StatefulWidget {
 
 class _WhitelistPageState extends State<WhitelistPage> {
   late final Stream<List<Member>> _members = context.read<Repo>().whitelist();
+  late final Stream<Set<String>> _admins = context.read<Repo>().admins();
 
   @override
   Widget build(BuildContext context) {
     final repo = context.read<Repo>();
+    final isOwner = context.read<AppState>().isOwner;
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         onPressed: () => _add(context, repo),
@@ -291,34 +293,81 @@ class _WhitelistPageState extends State<WhitelistPage> {
       ),
       body: StreamBuilder<List<Member>>(
         stream: _members,
-        builder: (context, s) {
-          if (s.hasError) return ErrorBox(s.error);
-          if (!s.hasData) return loading;
-          final list = s.data!;
-          if (list.isEmpty) return const Center(child: Text('Nadie en la whitelist. Pulsa para añadir un socio.'));
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 88),
-            children: [
-              for (final m in list)
-                ListTile(
-                  title: Text(m.label),
-                  subtitle: Text(m.email),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.person_remove_outlined),
-                    onPressed: () async {
-                      final ok = await confirm(
-                        context,
-                        'Dar de baja',
-                        '${m.email} perderá el acceso a la aplicación. Su consumo actual se conserva.',
-                        action: 'Dar de baja',
-                      );
-                      if (ok && context.mounted) await guarded(context, () => repo.removeMember(m.key));
-                    },
+        builder: (context, s) => StreamBuilder<Set<String>>(
+          stream: _admins,
+          builder: (context, a) {
+            if (s.hasError || a.hasError) return ErrorBox(s.error ?? a.error);
+            if (!s.hasData || !a.hasData) return loading;
+            final list = s.data!;
+            final admins = a.data!;
+            if (list.isEmpty) return const Center(child: Text('Nadie en la whitelist. Pulsa para añadir un socio.'));
+            return ListView(
+              padding: const EdgeInsets.only(bottom: 88),
+              children: [
+                for (final m in list)
+                  ListTile(
+                    title: Row(
+                      children: [
+                        Flexible(child: Text(m.label, overflow: TextOverflow.ellipsis)),
+                        if (admins.contains(m.key)) ...[
+                          const SizedBox(width: 8),
+                          const Chip(
+                            label: Text('Admin'),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                          ),
+                        ],
+                      ],
+                    ),
+                    subtitle: Text(m.email),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Solo el owner nombra o revierte admins.
+                        if (isOwner)
+                          IconButton(
+                            tooltip: admins.contains(m.key) ? 'Quitar admin' : 'Hacer admin',
+                            icon: Icon(
+                              admins.contains(m.key) ? Icons.remove_moderator_outlined : Icons.admin_panel_settings_outlined,
+                            ),
+                            onPressed: () async {
+                              final makeAdmin = !admins.contains(m.key);
+                              final ok = await confirm(
+                                context,
+                                makeAdmin ? 'Hacer administrador' : 'Quitar administrador',
+                                makeAdmin
+                                    ? '${m.label} podrá gestionar catálogo, socios, deudas e historial.'
+                                    : '${m.label} volverá a ser un socio normal.',
+                                action: makeAdmin ? 'Hacer admin' : 'Quitar admin',
+                              );
+                              if (ok && context.mounted) await guarded(context, () => repo.setAdmin(m.key, makeAdmin));
+                            },
+                          ),
+                        IconButton(
+                          tooltip: 'Dar de baja',
+                          icon: const Icon(Icons.person_remove_outlined),
+                          // Un admin promovido no puede dar de baja a otro admin (las reglas también lo impiden).
+                          onPressed: !isOwner && admins.contains(m.key)
+                              ? null
+                              : () async {
+                                  final ok = await confirm(
+                                    context,
+                                    'Dar de baja',
+                                    '${m.email} perderá el acceso a la aplicación. Su consumo actual se conserva.',
+                                    action: 'Dar de baja',
+                                  );
+                                  if (ok && context.mounted) {
+                                    await guarded(context, () => repo.removeMember(m.key, clearAdmin: isOwner));
+                                  }
+                                },
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
