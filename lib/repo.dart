@@ -8,8 +8,9 @@ class Repo {
 
   DatabaseReference _r(String path) => _db.ref(path);
 
-  // Streams sin parámetros: se cachean para no resuscribirse en cada build.
-  late final Stream<List<Product>> products = _r('products').onValue.map((e) {
+  // Cada llamada crea un stream nuevo (los de Firebase son broadcast y no repiten el último
+  // valor a quien se suscribe tarde): cada pantalla debe guardar el suyo en su State.
+  Stream<List<Product>> products() => _r('products').onValue.map((e) {
     final list = asMap(e.snapshot.value)
         .entries
         .map((x) => Product.fromMap(x.key, asMap(x.value)))
@@ -19,7 +20,7 @@ class Repo {
   });
 
   /// Solo admin.
-  late final Stream<List<Member>> whitelist = _r('whitelist').onValue.map((e) {
+  Stream<List<Member>> whitelist() => _r('whitelist').onValue.map((e) {
     final list = asMap(e.snapshot.value)
         .entries
         .map((x) => Member.fromMap(x.key, asMap(x.value)))
@@ -29,7 +30,7 @@ class Repo {
   });
 
   /// Solo admin.
-  late final Stream<Map<String, ConsumptionTab>> allTabs = _r('tabs').onValue.map(
+  Stream<Map<String, ConsumptionTab>> allTabs() => _r('tabs').onValue.map(
         (e) => asMap(e.snapshot.value).map((k, v) => MapEntry(k, ConsumptionTab.fromMap(asMap(v)))),
       );
 
@@ -109,6 +110,10 @@ class Repo {
       },
     });
   }
+
+  /// Solo admin. Las reglas solo permiten escribir por pago, así que se borra por ids en un único update.
+  Future<void> deletePayments(Iterable<String> ids) =>
+      _db.ref().update({for (final id in ids) 'payments_history/$id': null});
 
   // ---- Catálogo (admin) ----
 

@@ -21,7 +21,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
-    final myTab = TabView(uid: app.uid, canRemove: app.isAdmin);
+    final myTab = TabView(uid: app.uid);
 
     return Scaffold(
       appBar: AppBar(

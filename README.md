@@ -87,5 +87,5 @@ Cuenta de servicio de Play: créala en Google Cloud, descarga su clave JSON e in
 - Whitelist indexada por email en minúsculas con `.` → `,` (p. ej. `socio@email,com`), así las reglas pueden comprobar el acceso sin conocer el uid.
 - El administrador es `damarur92@gmail.com` (email verificado), fijado en `database.rules.json`.
 - Al añadir una consumición, el precio unitario de la línea se fija al precio actual del catálogo.
-- Los socios solo pueden sumar unidades; restar y gestionar a otros socios es exclusivo del admin.
+- Los socios pueden sumar y restar unidades de su propio consumo (por si se equivocan); solo el admin gestiona el de otros socios.
 - Un socio aparece con su deuda en el panel de admin cuando ya ha iniciado sesión al menos una vez (necesitamos su `uid`).

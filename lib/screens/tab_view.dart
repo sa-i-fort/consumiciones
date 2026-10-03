@@ -7,12 +7,11 @@ import '../repo.dart';
 import 'common.dart';
 
 /// Consumo de un socio: catálogo con botones +/-, desglose, total y botón de pago.
-/// [canRemove] permite restar unidades (solo administrador).
+/// Cualquier usuario puede sumar y restar unidades de su propio consumo; el admin, de cualquier socio.
 class TabView extends StatefulWidget {
-  const TabView({super.key, required this.uid, this.canRemove = false});
+  const TabView({super.key, required this.uid});
 
   final String uid;
-  final bool canRemove;
 
   @override
   State<TabView> createState() => _TabViewState();
@@ -20,6 +19,7 @@ class TabView extends StatefulWidget {
 
 class _TabViewState extends State<TabView> {
   late final Stream<ConsumptionTab> _tab = context.read<Repo>().tab(widget.uid);
+  late final Stream<List<Product>> _products = context.read<Repo>().products();
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +27,7 @@ class _TabViewState extends State<TabView> {
     final app = context.read<AppState>();
 
     return StreamBuilder<List<Product>>(
-      stream: repo.products,
+      stream: _products,
       builder: (context, ps) => StreamBuilder<ConsumptionTab>(
         stream: _tab,
         builder: (context, ts) {
@@ -107,11 +107,10 @@ class _TabViewState extends State<TabView> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (widget.canRemove)
-            IconButton(
-              onPressed: qty > 0 ? () => guarded(context, () => repo.adjust(widget.uid, p, -1)) : null,
-              icon: const Icon(Icons.remove_circle_outline),
-            ),
+          IconButton(
+            onPressed: qty > 0 ? () => guarded(context, () => repo.adjust(widget.uid, p, -1)) : null,
+            icon: const Icon(Icons.remove_circle_outline),
+          ),
           SizedBox(
             width: 28,
             child: Text('$qty', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),

@@ -10,8 +10,16 @@ import 'tab_view.dart';
 
 // ---------------------------------------------------------------- Socios
 
-class MembersPage extends StatelessWidget {
+class MembersPage extends StatefulWidget {
   const MembersPage({super.key});
+
+  @override
+  State<MembersPage> createState() => _MembersPageState();
+}
+
+class _MembersPageState extends State<MembersPage> {
+  late final Stream<List<Member>> _members = context.read<Repo>().whitelist();
+  late final Stream<Map<String, ConsumptionTab>> _tabs = context.read<Repo>().allTabs();
 
   @override
   Widget build(BuildContext context) {
@@ -19,9 +27,9 @@ class MembersPage extends StatelessWidget {
     final app = context.read<AppState>();
 
     return StreamBuilder<List<Member>>(
-      stream: repo.whitelist,
+      stream: _members,
       builder: (context, ms) => StreamBuilder<Map<String, ConsumptionTab>>(
-        stream: repo.allTabs,
+        stream: _tabs,
         builder: (context, ts) {
           if (ms.hasError || ts.hasError) return ErrorBox(ms.error ?? ts.error);
           if (!ms.hasData || !ts.hasData) return loading;
@@ -91,9 +99,32 @@ class MembersPage extends StatelessWidget {
                   leading: CircleAvatar(child: Text(m.label.characters.first.toUpperCase())),
                   title: Text(m.label),
                   subtitle: Text(m.uid == null ? '${m.email} · aún no ha accedido' : m.email),
-                  trailing: Text(
-                    money(m.uid == null ? 0 : (tabs[m.uid]?.totalAmount ?? 0)),
-                    style: Theme.of(context).textTheme.titleMedium,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        money(m.uid == null ? 0 : (tabs[m.uid]?.totalAmount ?? 0)),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      IconButton(
+                        tooltip: 'Marcar como pagado',
+                        icon: const Icon(Icons.check_circle_outline),
+                        onPressed: (tabs[m.uid]?.totalAmount ?? 0) > 0
+                            ? () async {
+                                final amount = tabs[m.uid]!.totalAmount;
+                                final ok = await confirm(
+                                  context,
+                                  'Marcar como pagado',
+                                  '${m.label}: se registrará un pago de ${money(amount)} y su deuda volverá a 0.',
+                                  action: 'Pagado',
+                                );
+                                if (ok && context.mounted) {
+                                  await guarded(context, () => repo.settle(m.uid!, app.uid));
+                                }
+                              }
+                            : null,
+                      ),
+                    ],
                   ),
                   onTap: m.uid == null
                       ? () => ScaffoldMessenger.of(context).showSnackBar(
@@ -104,7 +135,7 @@ class MembersPage extends StatelessWidget {
                             MaterialPageRoute(
                               builder: (_) => Scaffold(
                                 appBar: AppBar(title: Text(m.label)),
-                                body: TabView(uid: m.uid!, canRemove: true),
+                                body: TabView(uid: m.uid!),
                               ),
                             ),
                           ),
@@ -119,8 +150,15 @@ class MembersPage extends StatelessWidget {
 
 // -------------------------------------------------------------- Catálogo
 
-class CatalogPage extends StatelessWidget {
+class CatalogPage extends StatefulWidget {
   const CatalogPage({super.key});
+
+  @override
+  State<CatalogPage> createState() => _CatalogPageState();
+}
+
+class _CatalogPageState extends State<CatalogPage> {
+  late final Stream<List<Product>> _products = context.read<Repo>().products();
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +169,7 @@ class CatalogPage extends StatelessWidget {
         child: const Icon(Icons.add),
       ),
       body: StreamBuilder<List<Product>>(
-        stream: repo.products,
+        stream: _products,
         builder: (context, s) {
           if (s.hasError) return ErrorBox(s.error);
           if (!s.hasData) return loading;
@@ -233,8 +271,15 @@ class CatalogPage extends StatelessWidget {
 
 // -------------------------------------------------------------- Whitelist
 
-class WhitelistPage extends StatelessWidget {
+class WhitelistPage extends StatefulWidget {
   const WhitelistPage({super.key});
+
+  @override
+  State<WhitelistPage> createState() => _WhitelistPageState();
+}
+
+class _WhitelistPageState extends State<WhitelistPage> {
+  late final Stream<List<Member>> _members = context.read<Repo>().whitelist();
 
   @override
   Widget build(BuildContext context) {
@@ -245,7 +290,7 @@ class WhitelistPage extends StatelessWidget {
         child: const Icon(Icons.person_add_alt),
       ),
       body: StreamBuilder<List<Member>>(
-        stream: repo.whitelist,
+        stream: _members,
         builder: (context, s) {
           if (s.hasError) return ErrorBox(s.error);
           if (!s.hasData) return loading;
