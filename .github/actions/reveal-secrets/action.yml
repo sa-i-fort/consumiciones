@@ -16,7 +16,9 @@ runs:
       run: |
         git clone --quiet https://github.com/sobolevn/git-secret.git "$RUNNER_TEMP/git-secret"
         git -C "$RUNNER_TEMP/git-secret" checkout --quiet 83e1e282f64367c5950dcb46ff39175b8abd1baa
+        make -C "$RUNNER_TEMP/git-secret" build
         sudo make -C "$RUNNER_TEMP/git-secret" install PREFIX=/usr/local > /dev/null
+        git secret --version
 
     - name: Importar clave de CI y descifrar
       shell: bash
