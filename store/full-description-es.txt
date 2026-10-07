@@ -1,0 +1,27 @@
+Bar i Fort es la aplicación de la peña de fiestas Sa i Fort para llevar las cuentas de las consumiciones de forma clara, sin papeles ni hojas de cálculo.
+
+Cada socio apunta lo que consume desde su móvil y puede ver en cualquier momento cuánto lleva acumulado. Cuando liquida la cuenta, la marca como pagada y el contador vuelve a cero.
+
+PARA LOS SOCIOS
+• Añade con un toque las consumiciones que te corresponden y réstalas si te equivocas.
+• Consulta tu consumo actual con el desglose por producto y el total a pagar en euros, siempre actualizado.
+• Marca tu cuenta como pagada cuando hagas el pago (efectivo, Bizum o transferencia).
+• Revisa tu historial de pagos.
+
+PARA LOS ADMINISTRADORES
+• Gestiona el catálogo de productos y sus precios: crea, edita o elimina productos.
+• Da de alta y de baja a los socios, y corrige su nombre o su correo si te has equivocado.
+• Consulta la deuda global y la de cada socio, y ajusta sus consumiciones cuando haga falta.
+• Marca como pagada la cuenta de un solo socio o la de todos a la vez.
+• Revisa y limpia el historial de pagos.
+• Consulta cuándo accedió por última vez cada socio.
+• Nombra o revierte administradores.
+
+ACCESO PRIVADO
+La aplicación es de uso exclusivo de los miembros de la peña. Se entra con una cuenta de Google y solo pueden acceder los socios que un administrador haya dado de alta previamente. Cada socio ve únicamente sus propios datos.
+
+DATOS Y PRIVACIDAD
+Solo usamos tu correo y tu nombre para identificarte como socio, y tus consumiciones para calcular lo que debes. No incluye publicidad ni cede datos a terceros. Los datos se guardan en servicios de Firebase (Google).
+Política de privacidad: https://sa-i-fort.github.io/consumiciones/privacy.html
+
+Esta aplicación sirve únicamente para llevar cuentas entre socios; no es una tienda ni permite comprar productos.

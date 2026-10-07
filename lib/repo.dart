@@ -4,7 +4,8 @@ import 'package:firebase_database/firebase_database.dart';
 import 'models.dart';
 
 class Repo {
-  final FirebaseDatabase _db = FirebaseDatabase.instance;
+  // Perezoso: permite sustituir Repo por un doble de pruebas sin inicializar Firebase.
+  late final FirebaseDatabase _db = FirebaseDatabase.instance;
 
   DatabaseReference _r(String path) => _db.ref(path);
 
