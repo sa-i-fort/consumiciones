@@ -1,0 +1,58 @@
+name: CI
+
+# Comprobaciones en pull requests (incluidos los de Renovate). No usa secrets: en lugar del
+# firebase_options.dart real se usa la plantilla, suficiente para analizar y compilar.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Usar la plantilla de configuración de Firebase
+        run: cp lib/firebase_options.dart.example lib/firebase_options.dart
+
+      - run: flutter pub get
+
+      - run: flutter analyze
+
+      # Detecta roturas de Gradle/AGP o de dependencias nativas (típico en PRs de actualización).
+      - run: flutter build apk --debug
+
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Los commits del PR deben seguir Conventional Commits: de ellos sale la versión.
+      - name: Comprobar mensajes de commit
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          bad=0
+          while IFS= read -r subject; do
+            bash .githooks/check-message.sh "$subject" || { echo "::error::Mensaje no válido: $subject"; bad=1; }
+          done < <(git log --no-merges --format=%s "$BASE..$HEAD")
+          exit $bad

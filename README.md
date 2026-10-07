@@ -39,15 +39,45 @@ Como `firebase_options.dart` no está en claro en el repo, el workflow lo descif
 
 ## Build y publicación Android (Google Play)
 
-El workflow `.github/workflows/android-release.yml` compila el AAB (para Play) y el APK, y los sube como artefacto de la ejecución. Se lanza al subir un tag `v*` o a mano desde Actions. Con un tag `v*`, o marcando `publish` al lanzarlo a mano, el job `publish` sube el AAB a la pista **interna** de Google Play.
+### Versionado automático y releases
 
-```bash
-git tag v1.0.0 && git push origin v1.0.0
-```
+Con **cada push a `main`**, el workflow `.github/workflows/android-release.yml` mira los commits desde el último tag `vX.Y.Z` y decide la versión según [Conventional Commits](https://www.conventionalcommits.org/es/) (lo calcula `tool/next_version.sh`):
 
-- El `versionCode` es el nº de ejecución del workflow (`--build-number=${{ github.run_number }}`), así que siempre crece, como exige Play.
-- La release se firma con `android/key.properties` si existe (en CI lo genera el workflow desde los secrets). Sin ese fichero, en local se firma con la clave de debug.
-- No hace falta `google-services.json`: la config de Firebase va en `firebase_options.dart`. Está ignorado por git por si `flutterfire configure` lo genera.
+| Tipo de commit | Efecto | Ejemplo |
+|---|---|---|
+| `feat:` | sube **minor** (1.0.1 → 1.1.0) | `feat(whitelist): permite editar el email` |
+| `fix:` · `perf:` · `revert:` | sube **patch** (1.0.0 → 1.0.1) | `fix(ui): corrige el borde del botón` |
+| `tipo!:` o pie `BREAKING CHANGE:` | sube **major** (1.4.2 → 2.0.0) | `feat!: cambia el modelo de datos` |
+| `docs` · `style` · `refactor` · `test` · `build` · `ci` · `chore` | **no publica nada** | `docs: actualiza el README` |
+
+Si entre dos tags hay varios commits, manda el cambio más grande. Si ninguno es publicable, el run termina en verde sin compilar ni publicar. Un commit sin formato convencional no rompe nada: se ignora y el run lo señala con un aviso.
+
+Si hay versión nueva, el workflow:
+
+1. **Compila** el AAB firmado (descifra la config con git-secret, prepara el keystore, `flutter analyze`).
+2. **Publica** en Google Play (pista `internal`), con las novedades sacadas de los commits.
+3. **Solo si Play acepta la versión**, crea el tag `vX.Y.Z` sobre ese commit y una release en GitHub con las notas. Si algo falla antes, no queda ningún tag huérfano y la siguiente ejecución recalcula el mismo número.
+
+- **`versionName`** es la versión calculada; **`versionCode`** es el nº de ejecución del workflow (siempre creciente, como exige Play, y mayor que el de la primera versión subida a mano). La `version` de `pubspec.yaml` solo cuenta en builds locales.
+- **Notas de Play:** hasta 6 líneas de 80 caracteres, con las descripciones de los commits `feat`/`fix`/`perf`. Conviene redactarlos pensando en quien lee la ficha de la tienda.
+- **Estado en Play:** por defecto la release queda como **borrador** (Play lo exige mientras la app no tenga ninguna versión publicada) y hay que darle a *Lanzar* en la consola. Cuando ya tenga una versión publicada, crea la **variable** de repositorio `PLAY_RELEASE_STATUS = completed` (Settings → Secrets and variables → Actions → Variables) para que se publique sola.
+- **Ejecución manual:** Actions → *Release Android* → *Run workflow*. Sin marcar `publish` solo compila y deja el `.aab` como artefacto (30 días); marcándolo, publica en la pista elegida.
+- **Una release a la vez:** si entra otro push mientras corre una, espera y calcula la versión sobre el tag recién creado.
+
+#### Configuración inicial (una sola vez)
+
+1. **Tag base.** Hace falta un tag `vX.Y.Z` sobre el commit de la versión que ya está en Play, para contar desde ahí. Sin él, el workflow avisa y no publica. Con la 1.0.0 subida a mano (commit `3234141`):
+   ```bash
+   git tag v1.0.0 3234141
+   git push origin v1.0.0
+   ```
+   El siguiente `fix:` publicará la **1.0.1**.
+2. **Activa el hook local** que rechaza commits sin formato (una vez por clon):
+   ```bash
+   git config core.hooksPath .githooks
+   ```
+   Los pull requests también se validan en `.github/workflows/ci.yml`.
+3. **La primera versión de la app se sube a mano** en Play Console; la API no puede crear la app.
 
 ### Secrets de GitHub Actions
 
@@ -80,6 +110,27 @@ Cuenta de servicio de Play: créala en Google Cloud, descarga su clave JSON e in
 
 - **La primera versión se sube a mano.** Play exige crear la app (`com.saifort.consumiciones`) y hacer la primera subida desde la consola; a partir de ahí la API ya puede publicar.
 - **SHA-1 en Firebase.** Google Sign-In necesita el SHA-1 de la firma. Añade el de tu keystore de subida (`keytool -list -v -keystore $HOME\upload-keystore.jks -alias upload`) y, si usas Play App Signing, también el del certificado de firma de la app (Play Console → Integridad de la app). Sin esto el login falla en la app instalada desde Play.
+
+## Actualización automática de dependencias (Renovate)
+
+[Renovate](https://docs.renovatebot.com) abre pull requests para actualizar las dependencias; su configuración está en `renovate.json`.
+
+**Para activarlo (una vez):** instala la [app de Renovate](https://github.com/apps/renovate) en GitHub (gratis para repos públicos) y dale acceso solo a este repositorio. No hace falta ningún token.
+
+- **Qué vigila:** paquetes de `pubspec.yaml` (y `pubspec.lock`, que ahora se versiona para que los builds sean reproducibles), las Actions de los workflows (las fija por commit, porque manejan la clave de firma) y Gradle/plugin de Android.
+- **Cuándo:** los lunes antes de las 9:00 (Madrid), con un máximo de 5 PRs abiertos, y esperando 3 días desde la publicación de cada versión. Los paquetes `firebase_*` van juntos en un solo PR.
+- **Sin fusión automática:** tú revisas y fusionas. Cada PR pasa por `.github/workflows/ci.yml` (`flutter analyze` y compilación debug), que detecta roturas de Gradle o de dependencias nativas.
+
+Sus commits siguen Conventional Commits, y eso decide si fusionarlos publica una versión en Play:
+
+| Qué actualiza | Commit | ¿Publica versión al fusionar? |
+|---|---|---|
+| Dependencias de la app (`dependencies`) | `fix(deps): …` | Sí, **patch** |
+| Dependencias de desarrollo | `chore(deps): …` | No |
+| Actions de GitHub | `ci(deps): …` | No |
+| Gradle / plugin de Android | `build(deps): …` | No |
+
+Si prefieres que una actualización de dependencias no publique nada hasta la próxima versión real, cambia `semanticCommitType` de `fix` a `chore` en `renovate.json`.
 
 ## Seguridad de los secrets (git-secret)
 
@@ -116,7 +167,7 @@ Quitar a alguien **no invalida** lo que ya pudo descifrar ni las versiones antig
 ### Configurar GitHub (una vez)
 
 1. Settings → Environments → **New environment** → `production`.
-2. *Deployment branches and tags* → **Selected branches and tags** → `main` y el patrón de tag `v*`. Solo esas refs podrán leer los secrets.
+2. *Deployment branches and tags* → **Selected branches and tags** → solo la rama `main`. Cualquier workflow lanzado desde otra rama o desde un fork no podrá leer los secrets.
 3. (Opcional) *Required reviewers* → tú, para aprobar cada despliegue. Pide un clic por push a `main`; déjalo vacío si trabajas solo.
 4. Crea ahí el *Environment secret* `GPG_PRIVATE_KEY` con la clave privada de CI en base64. Con la CLI de GitHub:
    ```bash

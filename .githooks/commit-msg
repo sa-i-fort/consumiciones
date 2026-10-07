@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Hook local: rechaza commits que no sigan Conventional Commits.
+# Activar una vez por clon:  git config core.hooksPath .githooks
+subject="$(head -n1 "$1")"
+
+if ! bash "$(dirname "$0")/check-message.sh" "$subject"; then
+  cat >&2 <<'EOF'
+
+El mensaje del commit no sigue Conventional Commits:
+
+    tipo(ámbito opcional): descripción
+
+  feat      nueva funcionalidad            -> sube la versión minor
+  fix       corrección de un error         -> sube la versión patch
+  perf      mejora de rendimiento          -> sube la versión patch
+  revert    revierte un commit             -> sube la versión patch
+  docs, style, refactor, test, build, ci, chore -> no publican versión
+
+  Cambio incompatible: añade «!» (feat!: ...) o un pie «BREAKING CHANGE: ...» -> major
+
+  Ejemplos:  fix(ui): corrige el borde del botón
+             feat(whitelist): permite editar el email de un socio
+EOF
+  exit 1
+fi

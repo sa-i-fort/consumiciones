@@ -1,25 +1,94 @@
-name: Build Android (AAB/APK) y publicar en Google Play
+name: Release Android (Google Play)
 
+# Con cada push a main: calcula la versión a partir de los Conventional Commits desde el último
+# tag vX.Y.Z (tool/next_version.sh). Si hay algo publicable, compila, publica en Google Play y,
+# solo si Play lo acepta, crea el tag y la release en GitHub.
+#   feat -> minor | fix, perf, revert -> patch | tipo! o BREAKING CHANGE -> major
+#   docs, style, refactor, test, build, ci, chore -> no publican nada
+#
+# Todo en un único workflow porque un tag creado con GITHUB_TOKEN no dispara otros workflows.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publicar en Google Play (pista interna)"
+        description: "Publicar en Google Play (si no, solo compila y deja el .aab como artefacto)"
         type: boolean
         default: false
+      track:
+        description: "Pista de Google Play"
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: internal
 
 permissions:
   contents: read
 
+# Una release a la vez: si entra otro push mientras corre, espera y calcula la versión sobre el tag nuevo.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  build:
+  version:
     runs-on: ubuntu-latest
-    # Los secrets viven en el environment "production" (solo accesible desde main y tags v*).
+    outputs:
+      next: ${{ steps.v.outputs.next }}
+      previous: ${{ steps.v.outputs.previous }}
+      bump: ${{ steps.v.outputs.bump }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # historial y tags completos para calcular la versión
+
+      - name: Calcular versión
+        id: v
+        run: |
+          mkdir -p release
+          OUTPUT_FILE="$GITHUB_OUTPUT" NOTES_FILE=release/notes.md WHATSNEW_FILE=release/whatsnew-es-ES \
+            bash tool/next_version.sh
+
+      - name: Resumen
+        env:
+          PREVIOUS: ${{ steps.v.outputs.previous }}
+          BUMP: ${{ steps.v.outputs.bump }}
+          NEXT: ${{ steps.v.outputs.next }}
+        run: |
+          if [ -n "$NEXT" ]; then
+            echo "### Release $NEXT ($BUMP desde $PREVIOUS)" >> "$GITHUB_STEP_SUMMARY"
+            cat release/notes.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Sin release" >> "$GITHUB_STEP_SUMMARY"
+            echo "No hay commits publicables (feat, fix, perf, revert o cambios incompatibles) desde \`${PREVIOUS:-ningún tag}\`." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: steps.v.outputs.next != ''
+        with:
+          name: release-meta
+          path: release
+          retention-days: 30
+
+  build:
+    needs: version
+    # En manual (sin publicar) se compila aunque no haya versión nueva, con la de pubspec.yaml.
+    if: needs.version.outputs.next != '' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Los secrets viven en el environment "production" (solo accesible desde main).
     environment: production
     steps:
       - uses: actions/checkout@v4
+
+      - name: Determinar nombre de versión
+        id: name
+        env:
+          NEXT: ${{ needs.version.outputs.next }}
+        run: |
+          NAME="$NEXT"
+          [ -n "$NAME" ] || NAME="$(sed -nE 's/^version: *([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' pubspec.yaml | head -n1)"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Versión $NAME (código ${{ github.run_number }})"
 
       - uses: actions/setup-java@v4
         with:
@@ -43,7 +112,8 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/upload-keystore.jks
+          test -s android/upload-keystore.jks || { echo "::error::ANDROID_KEYSTORE_BASE64 vacío o no válido"; exit 1; }
           {
             echo "storeFile=upload-keystore.jks"
             echo "storePassword=$STORE_PASSWORD"
@@ -53,22 +123,40 @@ jobs:
 
       - run: flutter pub get
 
-      # versionCode = nº de ejecución (siempre creciente, requisito de Play).
-      - name: Build AAB (Play) y APK
+      - run: flutter analyze
+
+      # versionCode = nº de ejecución (siempre creciente, requisito de Play); debe superar al de la
+      # primera versión subida a mano.
+      - name: Build AAB firmado
+        run: >
+          flutter build appbundle --release
+          --build-name=${{ steps.name.outputs.name }}
+          --build-number=${{ github.run_number }}
+
+      - uses: actions/download-artifact@v4
+        if: needs.version.outputs.next != ''
+        with:
+          name: release-meta
+          path: release
+
+      - name: Preparar artefacto
         run: |
-          flutter build appbundle --release --build-number=${{ github.run_number }}
-          flutter build apk --release --build-number=${{ github.run_number }}
+          mkdir -p out/whatsnew
+          cp build/app/outputs/bundle/release/app-release.aab out/
+          # Novedades para Play (máx. 500 caracteres): vienen de los commits; si no hay, un texto genérico.
+          if [ -s release/whatsnew-es-ES ]; then cp release/whatsnew-es-ES out/whatsnew/; \
+            else echo "Mejoras y correcciones." > out/whatsnew/whatsnew-es-ES; fi
+          cat out/whatsnew/whatsnew-es-ES
 
       - uses: actions/upload-artifact@v4
         with:
           name: android-release
-          path: |
-            build/app/outputs/bundle/release/app-release.aab
-            build/app/outputs/flutter-apk/app-release.apk
+          path: out
+          retention-days: 30
 
   publish:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    needs: [version, build]
+    if: needs.version.outputs.next != '' && (github.event_name == 'push' || inputs.publish)
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -76,10 +164,36 @@ jobs:
         with:
           name: android-release
 
+      # status: "draft" es obligatorio mientras la app no tenga ninguna versión publicada en Play.
+      # Cuando ya la tenga, crea la variable de repositorio PLAY_RELEASE_STATUS = completed
+      # (Settings → Secrets and variables → Actions → Variables) para publicar sin pasos manuales.
       - uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.saifort.consumiciones
-          releaseFiles: bundle/release/app-release.aab
-          track: internal
-          status: completed
+          releaseFiles: app-release.aab
+          track: ${{ inputs.track || 'internal' }}
+          status: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}
+          releaseName: ${{ needs.version.outputs.next }}
+          whatsNewDirectory: whatsnew
+
+  tag-release:
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-meta
+          path: release
+
+      # Crea el tag vX.Y.Z sobre este commit y la release con las notas. Solo se llega aquí si Play
+      # aceptó la versión; no se adjunta el .aab/.apk.
+      - name: Crear tag y release en GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT: ${{ needs.version.outputs.next }}
+        run: |
+          gh release create "v$NEXT" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "v$NEXT" --notes-file release/notes.md

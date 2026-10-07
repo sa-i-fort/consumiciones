@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices", ":semanticCommits"],
+  "timezone": "Europe/Madrid",
+  "schedule": ["before 9am on monday"],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 5,
+  "minimumReleaseAge": "3 days",
+  "commitMessageLowerCase": "auto",
+  "packageRules": [
+    {
+      "description": "Dependencias que van dentro de la app: un fix(deps) publica una versión patch al fusionar",
+      "matchManagers": ["pub"],
+      "matchDepTypes": ["dependencies"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "Dependencias de desarrollo: no publican versión",
+      "matchManagers": ["pub"],
+      "matchDepTypes": ["dev_dependencies"],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "Todo Firebase junto: sus paquetes deben ir sincronizados",
+      "matchManagers": ["pub"],
+      "matchPackageNames": ["/^firebase_/"],
+      "groupName": "firebase (Flutter)"
+    },
+    {
+      "description": "Actions de GitHub (tocan firma y publicación): se fijan por commit y no publican versión",
+      "matchManagers": ["github-actions"],
+      "semanticCommitType": "ci",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "Gradle y el plugin de Android: no publican versión por sí solos",
+      "matchManagers": ["gradle", "gradle-wrapper"],
+      "semanticCommitType": "build",
+      "semanticCommitScope": "deps"
+    }
+  ]
+}

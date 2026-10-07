@@ -87,3 +87,14 @@ Aplicación multiplataforma (Android y Web) para la peña de fiestas **Sa i Fort
     }
   }
 }
+```
+
+---
+
+## Convenciones de commits y releases
+- **Conventional Commits en español**, `tipo(ámbito opcional): descripción`. De ellos sale la versión que se publica en Google Play al hacer push a `main` (ver README):
+  - `feat` sube minor; `fix`, `perf` y `revert` suben patch; `tipo!:` o un pie `BREAKING CHANGE:` sube major.
+  - `docs`, `style`, `refactor`, `test`, `build`, `ci` y `chore` no publican versión.
+- Cada `feat`/`fix` publica una release, así que no los uses para cambios que no afecten a la app (usa `chore`, `docs` o `ci`).
+- Hook local: `git config core.hooksPath .githooks` (rechaza mensajes sin formato).
+- No se editan versiones a mano: el tag `vX.Y.Z` lo crea el workflow tras publicar. La `version` de `pubspec.yaml` solo se usa en builds locales.
