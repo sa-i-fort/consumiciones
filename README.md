@@ -118,8 +118,8 @@ Cuenta de servicio de Play: créala en Google Cloud, descarga su clave JSON e in
 **Para activarlo (una vez):** instala la [app de Renovate](https://github.com/apps/renovate) en GitHub (gratis para repos públicos) y dale acceso solo a este repositorio. No hace falta ningún token.
 
 - **Qué vigila:** paquetes de `pubspec.yaml` (y `pubspec.lock`, que ahora se versiona para que los builds sean reproducibles), las Actions de los workflows (las fija por commit, porque manejan la clave de firma) y Gradle/plugin de Android.
-- **Cuándo:** los lunes antes de las 9:00 (Madrid), con un máximo de 5 PRs abiertos, y esperando 3 días desde la publicación de cada versión. Los paquetes `firebase_*` van juntos en un solo PR.
-- **Sin fusión automática:** tú revisas y fusionas. Cada PR pasa por `.github/workflows/ci.yml` (`flutter analyze` y compilación debug), que detecta roturas de Gradle o de dependencias nativas.
+- **Cuándo:** todos los días antes de las 9:00 (Madrid), con un máximo de 5 PRs abiertos y esperando 3 días desde la publicación de cada versión (protege de versiones recién publicadas con problemas). Las actualizaciones minor/patch de las dependencias de la app van juntas en **un solo PR** ("dependencias de la app"), así que como mucho hay una release diaria.
+- **Fusión automática** (solo si el CI pasa: `flutter analyze` y compilación debug, en `.github/workflows/ci.yml`): únicamente para actualizaciones **minor y patch de paquetes pub**. Quedan **con revisión manual** los *major*, Gradle/plugin de Android y las Actions de GitHub.
 
 Sus commits siguen Conventional Commits, y eso decide si fusionarlos publica una versión en Play:
 
@@ -130,7 +130,11 @@ Sus commits siguen Conventional Commits, y eso decide si fusionarlos publica una
 | Actions de GitHub | `ci(deps): …` | No |
 | Gradle / plugin de Android | `build(deps): …` | No |
 
-Si prefieres que una actualización de dependencias no publique nada hasta la próxima versión real, cambia `semanticCommitType` de `fix` a `chore` en `renovate.json`.
+Una actualización fusionada con `fix(deps)` publica una release sin que nadie la revise, y el CI solo comprueba que compila (no hay tests de comportamiento). Si prefieres que las dependencias no publiquen nada hasta la próxima versión real, cambia `semanticCommitType` de `fix` a `chore` en `renovate.json`.
+
+**Por qué no se fusionan solas las Actions ni los major:** las Actions se ejecutan con tus secrets (clave de firma, cuenta de Play) al fusionar a `main`, así que una versión comprometida sería lo más grave que podría colarse; y un major puede compilar pero cambiar el comportamiento (Firebase Auth o Database, por ejemplo). Para ampliar la fusión automática, añade `"automerge": true` a la regla correspondiente de `renovate.json`.
+
+**Opcional, para que la espera del CI sea a prueba de fallos:** en Settings → Rules crea un ruleset sobre `main` que exija los checks `check` y `commits`, y **añade tu usuario a la lista de bypass** para poder seguir haciendo push directo. Con "Allow auto-merge" activado en Settings → General, Renovate usará entonces la fusión automática de GitHub, que espera a los checks obligatorios.
 
 ## Seguridad de los secrets (git-secret)
 

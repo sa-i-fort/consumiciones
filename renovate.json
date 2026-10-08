@@ -2,11 +2,13 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:best-practices", ":semanticCommits"],
   "timezone": "Europe/Madrid",
-  "schedule": ["before 9am on monday"],
+  "schedule": ["before 9am"],
   "labels": ["dependencies"],
   "prConcurrentLimit": 5,
   "minimumReleaseAge": "3 days",
   "commitMessageLowerCase": "auto",
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
   "packageRules": [
     {
       "description": "Dependencias que van dentro de la app: un fix(deps) publica una versión patch al fusionar",
@@ -23,12 +25,6 @@
       "semanticCommitScope": "deps"
     },
     {
-      "description": "Todo Firebase junto: sus paquetes deben ir sincronizados",
-      "matchManagers": ["pub"],
-      "matchPackageNames": ["/^firebase_/"],
-      "groupName": "firebase (Flutter)"
-    },
-    {
       "description": "Actions de GitHub (tocan firma y publicación): se fijan por commit y no publican versión",
       "matchManagers": ["github-actions"],
       "semanticCommitType": "ci",
@@ -39,6 +35,26 @@
       "matchManagers": ["gradle", "gradle-wrapper"],
       "semanticCommitType": "build",
       "semanticCommitScope": "deps"
+    },
+    {
+      "description": "Todas las dependencias de la app (minor/patch) en un solo PR al día: así hay como máximo una release diaria. Incluye los paquetes firebase_*, que deben ir sincronizados",
+      "matchManagers": ["pub"],
+      "matchDepTypes": ["dependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dependencias de la app"
+    },
+    {
+      "description": "Los major de Firebase también van juntos, y siempre con revisión manual",
+      "matchManagers": ["pub"],
+      "matchPackageNames": ["/^firebase_/"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "firebase (major)"
+    },
+    {
+      "description": "FUSIÓN AUTOMÁTICA solo para minor/patch de paquetes pub, si el CI pasa. Los major, Gradle y las Actions de GitHub quedan con revisión manual",
+      "matchManagers": ["pub"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
     }
   ]
 }
